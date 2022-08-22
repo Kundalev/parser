@@ -1,5 +1,11 @@
 <?php
 
+try {
+    $dbh = new PDO('mysql:dbname=parser;host=localhost', 'root', '');
+} catch (PDOException $e) {
+    die($e->getMessage());
+}
+
 $url = "https://www.apple.com/sitemap.xml";
 
 
@@ -14,8 +20,6 @@ $arrOutput = json_decode($objJsonDocument, TRUE);
 $arrOutput = $arrOutput['url'];
 
 $arr = [];
-$categories = [];
-$grouped = [];
 
 foreach ($arrOutput as $link) {
     $fullLink = str_replace('https://www.apple.com/', '', $link['loc']);
@@ -23,63 +27,28 @@ foreach ($arrOutput as $link) {
         $fullLink = substr($fullLink, 0, -1);
     }
     $category = explode("/", $fullLink);
-
-
-    print_r($category[0]);
-    foreach ($category as $c) {
-        try {
-            $dbh = new PDO('mysql:dbname=parser;host=localhost', 'root', '');
-        } catch (PDOException $e) {
-            die($e->getMessage());
-        }
-
-
-        $sth = $dbh->prepare("SELECT * FROM `categories` WHERE `name` = :name");
-        $sth->execute(['name' => $c]);
-        $value = $sth->fetch(PDO::FETCH_COLUMN);
-        if (!$value) {
-            $sth = $dbh->prepare("INSERT INTO `categories` SET `name` = :name, `parent_id` = :parent_id");
-            $sth->execute(['name' => $c, 'parent_id' => '0']);
-        } else {
-            $sth = $dbh->prepare("INSERT INTO `categories` SET `name` = :name, `parent_id` = :parent_id");
-            $sth->execute(['name' => $c, 'parent_id' => $value]);
-        }
-
+    if (!in_array($category[0], $arr)) {
+        $arr [] = $category[0];
+        $sth = $dbh->prepare("INSERT INTO `categories` SET `name` = :name, `parent_id` = :parent_id");
+        $sth->execute(['name' => $category[0], 'parent_id' => '0']);
     }
-}
+    $sth = $dbh->prepare("SELECT * FROM `categories` WHERE `name` = :name");
+    $sth->execute(['name' => $category[0]]);
+    $value = $sth->fetch(PDO::FETCH_COLUMN);
+
+    $count = count($category);
 
 
-foreach (array_unique($arr, SORT_REGULAR,) as $el) {
-    $categories[] = $el;
-    categoryToBD($el);
-}
-array_shift($categories);
+    for ($i = 1; $i <= $count; $i++) {
 
-foreach ($arrOutput as $link) {
-    $fullLink = str_replace('https://www.apple.com/', '', $link['loc']);
-    $category = strstr($fullLink, '/', true);
-    foreach ($categories as $el) {
-        if ($category === $el) {
-            $grouped [] = [
-                'category' => $el,
-                'link' => $fullLink
-            ];
+        print_r('|' . $count . ' ');
+        print_r($i . '|');
+        if (count($category) < $i) {
+            if (!in_array($category[$i], $arr)) {
+                $arr [] = $category[$i];
+                $sth = $dbh->prepare("INSERT INTO `categories` SET `name` = :name, `parent_id` = :parent_id");
+                $sth->execute(['name' => $category[$i], 'parent_id' => $value]);
+            }
         }
     }
 }
-
-
-/*foreach ($grouped as $item){
-    var_dump($item);
-    try {
-        $dbh = new PDO('mysql:dbname=parser;host=localhost', 'root', '');
-    } catch (PDOException $e) {
-        die($e->getMessage());
-    }
-    $sth = $dbh->prepare("INSERT INTO `links` SET `id_category` = :name, `link` = :link");
-    $sth->execute( ['id_category' => $item['category'], 'link' => $item['link']]);
-}*/
-
-/*var_dump($arrOutput);*/
-
-
